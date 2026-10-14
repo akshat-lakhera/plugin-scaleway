@@ -3,7 +3,7 @@
 ## What
 
 - Provides plugin components under `io.kestra.plugin.scaleway`.
-- Includes classes such as `Example`, `Trigger`.
+- `io.kestra.plugin.scaleway.storage` works with Scaleway Object Storage through its S3-compatible API, with classes such as `AbstractS3`, `CreateBucket`, `DeleteBucket`, `ListBuckets`, `Upload`, `Download`, `Delete`, `List`, `Copy`, `ObjectStorageTrigger`.
 
 ## Why
 
@@ -17,7 +17,7 @@
 
 Single-module plugin. Source packages under `io.kestra.plugin`:
 
-- `scaleway`
+- `scaleway.storage`
 
 Infrastructure dependencies (Docker Compose services):
 
@@ -25,7 +25,11 @@ Infrastructure dependencies (Docker Compose services):
 
 ### Key Plugin Classes
 
-- `io.kestra.plugin.scaleway.Example`
+- `io.kestra.plugin.scaleway.storage.AbstractS3`
+- `io.kestra.plugin.scaleway.storage.Upload`
+- `io.kestra.plugin.scaleway.storage.Download`
+- `io.kestra.plugin.scaleway.storage.List`
+- `io.kestra.plugin.scaleway.storage.ObjectStorageTrigger`
 
 ### Project Structure
 

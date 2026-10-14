@@ -1,0 +1,8 @@
+group: io.kestra.plugin.scaleway.storage
+name: "storage"
+title: "Scaleway Object Storage"
+description: "Tasks and triggers that manage Scaleway Object Storage buckets and objects."
+body: "Create, list and delete buckets, upload files from internal storage, download objects to internal storage, list, copy, move and delete keys, and trigger flows when new or updated objects appear under a prefix. The trigger remembers the objects it already fired for, so each object version fires only once."
+videos: []
+createdBy: "Kestra Core Team"
+managedBy: "Kestra Core Team"

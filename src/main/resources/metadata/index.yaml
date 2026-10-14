@@ -1,8 +1,8 @@
 group: io.kestra.plugin.scaleway
 name: "scaleway"
 title: "Scaleway"
-description: "Scaleway plugin for Kestra"
-body: ""
+description: "Tasks and triggers that integrate Scaleway, the European cloud provider, with Kestra workflows."
+body: "Authenticate with the access key and secret key of a Scaleway API key, ideally stored as secrets, and set the region of the resources. Object Storage tasks reach https://s3.{region}.scw.cloud by default, and endpointOverride points them to another S3-compatible endpoint."
 videos: []
 createdBy: "Kestra Core Team"
 managedBy: "Kestra Core Team"

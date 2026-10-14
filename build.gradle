@@ -49,6 +49,10 @@ dependencies {
     annotationProcessor group: "io.kestra", name: "processor", version: kestraVersion
     compileOnly group: "io.kestra", name: "core", version: kestraVersion
     compileOnly group: "io.kestra", name: "script", version: kestraVersion
+
+    // AWS SDK v2, versions are managed by the Kestra platform so they stay aligned with plugin-aws
+    api "software.amazon.awssdk:s3"
+    api "software.amazon.awssdk:apache-client"
 }
 
 
@@ -87,6 +91,10 @@ dependencies {
     testImplementation "org.junit.jupiter:junit-jupiter-engine"
     testImplementation "org.hamcrest:hamcrest"
     testImplementation "org.hamcrest:hamcrest-library"
+
+    // testcontainers
+    testImplementation "org.testcontainers:testcontainers:2.0.5"
+    testImplementation "org.testcontainers:testcontainers-junit-jupiter:2.0.5"
 }
 
 /**********************************************************************************************************************\
