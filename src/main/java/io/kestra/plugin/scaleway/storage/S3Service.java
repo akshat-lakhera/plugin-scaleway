@@ -4,7 +4,6 @@ import java.io.File;
 import java.net.URI;
 import java.util.ArrayList;
 
-import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import io.kestra.core.exceptions.IllegalVariableEvaluationException;
@@ -39,8 +38,10 @@ final class S3Service {
         var rRegion = runContext.render(connection.getRegion()).as(String.class)
             .filter(StringUtils::isNotBlank)
             .orElseThrow(() -> new IllegalArgumentException("The 'region' property is required"));
-        var rAccessKey = runContext.render(connection.getAccessKey()).as(String.class).orElseThrow();
-        var rSecretKey = runContext.render(connection.getSecretKey()).as(String.class).orElseThrow();
+        var rAccessKey = runContext.render(connection.getAccessKey()).as(String.class)
+            .orElseThrow(() -> new IllegalArgumentException("accessKey is required"));
+        var rSecretKey = runContext.render(connection.getSecretKey()).as(String.class)
+            .orElseThrow(() -> new IllegalArgumentException("secretKey is required"));
         var rEndpoint = runContext.render(connection.getEndpointOverride()).as(String.class)
             .filter(StringUtils::isNotBlank)
             .orElse(DEFAULT_ENDPOINT.formatted(rRegion));
@@ -64,12 +65,20 @@ final class S3Service {
         //noinspection ResultOfMethodCallIgnored
         tempFile.delete();
 
-        GetObjectResponse response = client.getObject(request, ResponseTransformer.toFile(tempFile.toPath()));
+        GetObjectResponse response;
+        try {
+            response = client.getObject(request, ResponseTransformer.toFile(tempFile.toPath()));
+        } catch (Exception e) {
+            //noinspection ResultOfMethodCallIgnored
+            tempFile.delete();
+            throw e;
+        }
+        long size = tempFile.length();
         URI uri = runContext.storage().putFile(tempFile);
 
         return Download.Output.builder()
             .uri(uri)
-            .contentLength(response.contentLength())
+            .contentLength(size)
             .contentType(response.contentType())
             .eTag(response.eTag())
             .versionId(response.versionId())
@@ -129,7 +138,8 @@ final class S3Service {
         RunContext runContext,
         ObjectStorageTrigger trigger,
         java.util.List<S3Object> objects,
-        String bucket
+        String bucket,
+        String prefix
     ) throws Exception {
         var rAction = runContext.render(trigger.getAction()).as(ObjectStorageTrigger.Action.class).orElse(ObjectStorageTrigger.Action.NONE);
 
@@ -156,9 +166,12 @@ final class S3Service {
             var rMoveToKey = runContext.render(trigger.getMoveTo().getKey()).as(String.class).orElse("");
 
             for (S3Object object : objects) {
+                var relativeKey = StringUtils.isNotEmpty(prefix) && object.getKey().startsWith(prefix)
+                    ? object.getKey().substring(prefix.length())
+                    : object.getKey();
                 var destinationKey = StringUtils.isEmpty(rMoveToKey)
-                    ? FilenameUtils.getName(object.getKey())
-                    : StringUtils.stripEnd(rMoveToKey, "/") + "/" + FilenameUtils.getName(object.getKey());
+                    ? relativeKey
+                    : StringUtils.stripEnd(rMoveToKey, "/") + "/" + relativeKey;
 
                 Copy.builder()
                     .id(trigger.getId())

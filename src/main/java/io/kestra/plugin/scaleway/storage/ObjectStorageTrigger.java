@@ -96,7 +96,8 @@ import static io.kestra.core.models.triggers.StatefulTriggerService.*;
     description = """
         Polls a bucket on a fixed interval and fires one execution with every new or updated object that matches the prefix and regexp filters.
         Matched objects are downloaded to Kestra internal storage. The trigger keeps the key and ETag of the objects it already fired for in its state, so an object fires only once per version even with action NONE.
-        Use action DELETE or MOVE to also remove matched objects from the source location."""
+        Use action DELETE or MOVE to also remove matched objects from the source location.
+        Objects are downloaded first, then the action runs, then the state is saved. If the action fails part way, the remaining objects are retried on the next poll, so delivery is at-least-once."""
 )
 public class ObjectStorageTrigger extends AbstractTrigger
     implements PollingTriggerInterface, TriggerOutput<ObjectStorageTrigger.Output>, StatefulTriggerInterface, S3ConnectionInterface {
@@ -169,7 +170,7 @@ public class ObjectStorageTrigger extends AbstractTrigger
 
     @Schema(
         title = "Action on matched objects",
-        description = "NONE leaves the objects in place, DELETE deletes them and MOVE moves them to moveTo once they were downloaded."
+        description = "NONE leaves the objects in place, DELETE deletes them and MOVE moves them to moveTo once they were downloaded. Downloads happen first, then the action, then the state is saved: if the action fails part way, the remaining objects are retried on the next poll (at-least-once)."
     )
     @Builder.Default
     @PluginProperty(group = "main")
@@ -177,7 +178,7 @@ public class ObjectStorageTrigger extends AbstractTrigger
 
     @Schema(
         title = "Destination for the MOVE action",
-        description = "Objects keep their file name and are moved under this key prefix. The bucket defaults to the watched bucket."
+        description = "Objects keep their path relative to the watched prefix and are moved under this key prefix. The bucket defaults to the watched bucket."
     )
     @PluginProperty(group = "destination")
     private Copy.CopyObject moveTo;
@@ -215,6 +216,21 @@ public class ObjectStorageTrigger extends AbstractTrigger
             throw new IllegalArgumentException("The 'maxFiles' property must be greater than 0, got " + rMaxFiles);
         }
 
+        var rPrefix = runContext.render(this.prefix).as(String.class).orElse("");
+        var rAction = runContext.render(this.action).as(Action.class).orElse(Action.NONE);
+        if (rAction == Action.MOVE) {
+            if (this.moveTo == null) {
+                throw new IllegalArgumentException("The 'moveTo' property is required when 'action' is MOVE");
+            }
+            var rMoveToBucket = runContext.render(this.moveTo.getBucket()).as(String.class).orElse(rBucket);
+            var rMoveToKey = runContext.render(this.moveTo.getKey()).as(String.class).orElse("");
+            if (rMoveToBucket.equals(rBucket) && rMoveToKey.startsWith(rPrefix)) {
+                throw new IllegalArgumentException(
+                    "The 'moveTo' destination '%s' must not be inside the watched prefix '%s' of bucket '%s'".formatted(rMoveToKey, rPrefix, rBucket)
+                );
+            }
+        }
+
         java.util.List<S3Object> listed;
         try (var client = S3Service.client(runContext, this)) {
             listed = S3Service.list(
@@ -230,11 +246,13 @@ public class ObjectStorageTrigger extends AbstractTrigger
             );
         }
 
+        var state = readState(runContext, rStateKey, rStateTtl);
         if (listed.isEmpty()) {
+            // still persist the state so expired or removed entries are cleaned up
+            writeState(runContext, rStateKey, state, rStateTtl);
             return Optional.empty();
         }
 
-        var state = readState(runContext, rStateKey, rStateTtl);
         java.util.List<TriggeredObject> triggered = new ArrayList<>();
         java.util.List<S3Object> matched = new ArrayList<>();
 
@@ -281,7 +299,7 @@ public class ObjectStorageTrigger extends AbstractTrigger
             return Optional.empty();
         }
 
-        S3Service.performAction(runContext, this, matched, rBucket);
+        S3Service.performAction(runContext, this, matched, rBucket, rPrefix);
         writeState(runContext, rStateKey, state, rStateTtl);
 
         var output = Output.builder().objects(triggered).build();

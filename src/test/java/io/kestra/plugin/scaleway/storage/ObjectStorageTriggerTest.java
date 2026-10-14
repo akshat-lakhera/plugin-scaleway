@@ -16,6 +16,7 @@ import io.kestra.core.utils.TestsUtils;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class ObjectStorageTriggerTest extends AbstractObjectStorageTest {
     @Test
@@ -107,6 +108,55 @@ class ObjectStorageTriggerTest extends AbstractObjectStorageTest {
         assertThat(objects(evaluate(trigger, context)), hasSize(1));
         assertThat(listKeys(bucket), contains("incoming/b.json"));
         assertThat(listKeys(archive), contains("processed/a.csv"));
+    }
+
+    @Test
+    void moveActionKeepsRelativePathsForSameNamedFiles() throws Exception {
+        String bucket = createBucket();
+        String archive = createBucket();
+        upload(bucket, "incoming/2024/a.csv", "old");
+        upload(bucket, "incoming/2025/a.csv", "new");
+
+        ObjectStorageTrigger trigger = trigger(bucket)
+            .prefix(Property.ofValue("incoming/"))
+            .action(Property.ofValue(ObjectStorageTrigger.Action.MOVE))
+            .moveTo(Copy.CopyObject.builder().bucket(Property.ofValue(archive)).key(Property.ofValue("processed")).build())
+            .build();
+        var context = TestsUtils.mockTrigger(runContextFactory, trigger);
+
+        assertThat(objects(evaluate(trigger, context)), hasSize(2));
+        assertThat(listKeys(bucket), empty());
+        assertThat(listKeys(archive), containsInAnyOrder("processed/2024/a.csv", "processed/2025/a.csv"));
+    }
+
+    @Test
+    void moveActionWithoutMoveToFails() throws Exception {
+        String bucket = createBucket();
+
+        ObjectStorageTrigger trigger = trigger(bucket)
+            .action(Property.ofValue(ObjectStorageTrigger.Action.MOVE))
+            .build();
+        var context = TestsUtils.mockTrigger(runContextFactory, trigger);
+
+        var exception = assertThrows(IllegalArgumentException.class, () -> trigger.evaluate(context.getKey(), context.getValue()));
+        assertThat(exception.getMessage(), containsString("'moveTo' property is required"));
+    }
+
+    @Test
+    void moveToInsideWatchedPrefixFails() throws Exception {
+        String bucket = createBucket();
+        upload(bucket, "incoming/a.csv", "a");
+
+        ObjectStorageTrigger trigger = trigger(bucket)
+            .prefix(Property.ofValue("incoming/"))
+            .action(Property.ofValue(ObjectStorageTrigger.Action.MOVE))
+            .moveTo(Copy.CopyObject.builder().key(Property.ofValue("incoming/processed/")).build())
+            .build();
+        var context = TestsUtils.mockTrigger(runContextFactory, trigger);
+
+        var exception = assertThrows(IllegalArgumentException.class, () -> trigger.evaluate(context.getKey(), context.getValue()));
+        assertThat(exception.getMessage(), containsString("must not be inside the watched prefix"));
+        assertThat(listKeys(bucket), contains("incoming/a.csv"));
     }
 
     @Test

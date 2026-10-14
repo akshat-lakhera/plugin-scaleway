@@ -178,6 +178,9 @@ public class Upload extends AbstractS3 implements RunnableTask<Upload.Output> {
                 .eTag(response.eTag())
                 .versionId(response.versionId())
                 .build();
+        } finally {
+            //noinspection ResultOfMethodCallIgnored
+            tempFile.delete();
         }
     }
 
